@@ -1,205 +1,177 @@
 import streamlit as st
-import numpy as np
-import torch
-import torch.nn as nn
-import matplotlib.pyplot as plt
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import LabelEncoder
 
 # -----------------------------
-# PAGE CONFIG
+# CONFIG
 # -----------------------------
-st.set_page_config(page_title="Digital Twin System", layout="wide")
-st.title("🧠 Digital Twin + Predictive Intelligence System")
-
-# -----------------------------
-# MODEL
-# -----------------------------
-
-
-class LSTMModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.lstm = nn.LSTM(input_size=3, hidden_size=64, batch_first=True)
-        self.fc = nn.Linear(64, 3)
-
-    def forward(self, x):
-        out, _ = self.lstm(x)
-        return self.fc(out[:, -1, :])
+st.set_page_config(page_title="Demand Intelligence Engine", layout="wide")
+st.title("🚀 Demand Forecasting System")
 
 # -----------------------------
-# DATASET
+# MULTI-PRODUCT SUPPORT
+# -----------------------------
+st.subheader("🛍️ Product Setup")
+
+products = st.text_area(
+    "Enter Product Names (comma separated)",
+    "Jacket, Ice Cream"
+)
+
+product_list = [p.strip() for p in products.split(",") if p.strip()]
+
+product_type = st.selectbox(
+    "Select Product Seasonality",
+    ["Winter Product", "Summer Product", "All-Season Product"]
+)
+
+# -----------------------------
+# DATA GENERATION
 # -----------------------------
 
 
-def create_dataset(data, time_step=5):
-    X, y = [], []
-    for i in range(len(data) - time_step - 1):
-        X.append(data[i:i+time_step])
-        y.append(data[i+time_step])
-    return np.array(X), np.array(y)
+@st.cache_data
+def generate_data(product_type):
+    np.random.seed(42)
+    days = 200
+    date = pd.date_range(start="2023-01-01", periods=days)
 
+    price = np.random.uniform(50, 150, days)
+    season = np.random.choice(["Winter", "Summer", "Monsoon"], days)
 
-# -----------------------------
-# INIT SESSION
-# -----------------------------
-if "data" not in st.session_state:
-    st.session_state.data = []
-    st.session_state.model = LSTMModel()
-    st.session_state.scaler = MinMaxScaler()
-    st.session_state.optimizer = torch.optim.Adam(
-        st.session_state.model.parameters(), lr=0.001)
-    st.session_state.criterion = nn.MSELoss()
-    st.session_state.anomaly_count = 0
+    base = 200 - price + np.random.normal(0, 10, days)
 
-# -----------------------------
-# INPUT SECTION
-# -----------------------------
-st.subheader("🎮 Control System")
+    season_effect = []
 
-temp = st.slider("Temperature", -10.0, 10.0, 0.0)
-pressure = st.slider("Pressure", -10.0, 10.0, 0.0)
-vibration = st.slider("Vibration", -10.0, 10.0, 0.0)
+    for s in season:
+        if product_type == "Winter Product":
+            effect = 30 if s == "Winter" else -10
+        elif product_type == "Summer Product":
+            effect = 30 if s == "Summer" else -10
+        else:
+            effect = 10
 
-col1, col2 = st.columns(2)
+        season_effect.append(effect)
 
-with col1:
-    if st.button("➕ Add Data"):
-        st.session_state.data.append([temp, pressure, vibration])
+    demand = base + np.array(season_effect)
 
-with col2:
-    if st.button("🔄 Reset"):
-        st.session_state.data = []
-        st.session_state.anomaly_count = 0
-
-# -----------------------------
-# MAIN LOGIC
-# -----------------------------
-data = np.array(st.session_state.data)
-
-if len(data) > 7:
-
-    scaled = st.session_state.scaler.fit_transform(data)
-
-    X, y = create_dataset(scaled)
-
-    # SAFETY CHECK
-    if len(X) == 0:
-        st.warning("Add more data")
-        st.stop()
-
-    X = torch.tensor(X, dtype=torch.float32)
-    y = torch.tensor(y, dtype=torch.float32)
-
-    if len(X.shape) != 3:
-        st.error("Data shape issue")
-        st.stop()
-
-    # TRAIN
-    st.session_state.model.train()
-    st.session_state.optimizer.zero_grad()
-    output = st.session_state.model(X)
-    loss = st.session_state.criterion(output, y)
-    loss.backward()
-    st.session_state.optimizer.step()
-
-    # PREDICT
-    last_input = torch.tensor(
-        scaled[-5:].reshape(1, 5, 3), dtype=torch.float32)
-    pred = st.session_state.model(last_input).detach().numpy()
-    pred_real = st.session_state.scaler.inverse_transform(pred)[0]
-
-    # -----------------------------
-    # ANOMALY
-    # -----------------------------
-    mean = np.mean(data, axis=0)
-    std = np.std(data, axis=0)
-    current = data[-1]
-
-    anomaly = np.any(np.abs(current - mean) > 1.5 * std)
-
-    if anomaly:
-        st.session_state.anomaly_count += 1
-
-    # -----------------------------
-    # HEALTH
-    # -----------------------------
-    health = 100 - (40 if anomaly else 0)
-
-    # -----------------------------
-    # CONFIDENCE SCORE (NEW)
-    # -----------------------------
-    confidence = max(0, 100 - loss.item() * 100)
-
-    # -----------------------------
-    # TREND DETECTION (NEW)
-    # -----------------------------
-    trend = "Stable"
-    if data[-1][0] > data[-2][0]:
-        trend = "Increasing 📈"
-    elif data[-1][0] < data[-2][0]:
-        trend = "Decreasing 📉"
-
-    # -----------------------------
-    # GRAPH
-    # -----------------------------
-    fig, ax = plt.subplots()
-
-    ax.plot(data[:, 0], label="Temperature")
-    ax.plot(data[:, 1], label="Pressure")
-    ax.plot(data[:, 2], label="Vibration")
-
-    if anomaly:
-        ax.scatter(len(data)-1, data[-1][0], s=120, label="Anomaly")
-
-    ax.legend()
-    ax.set_title("System Behavior")
-
-    st.pyplot(fig)
-
-    # -----------------------------
-    # OUTPUT
-    # -----------------------------
-    st.subheader("🔮 Prediction")
-
-    st.write({
-        "Temperature": round(pred_real[0], 2),
-        "Pressure": round(pred_real[1], 2),
-        "Vibration": round(pred_real[2], 2)
+    return pd.DataFrame({
+        "date": date,
+        "price": price,
+        "season": season,
+        "demand": demand
     })
 
-    col1, col2, col3 = st.columns(3)
 
-    col1.metric("❤️ Health", health)
-    col2.metric("⚠️ Anomalies", st.session_state.anomaly_count)
-    col3.metric("🎯 Confidence", round(confidence, 2))
+if product_list:
 
-    st.write("📊 Trend:", trend)
+    df = generate_data(product_type)
 
-    if anomaly:
-        st.error("⚠️ Anomaly Detected")
+    # -----------------------------
+    # MODEL
+    # -----------------------------
+    le = LabelEncoder()
+    df["season_enc"] = le.fit_transform(df["season"])
+
+    X = df[["price", "season_enc"]]
+    y = df["demand"]
+
+    model = RandomForestRegressor(n_estimators=200)
+    model.fit(X, y)
+
+    # -----------------------------
+    # SCENARIO COMPARISON
+    # -----------------------------
+    st.subheader("⚔️ Scenario Comparison")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### Scenario A")
+        price_A = st.slider("Price A", 50, 150, 90)
+        season_A = st.selectbox("Season A", ["Winter", "Summer", "Monsoon"])
+
+        enc_A = le.transform([season_A])[0]
+        demand_A = model.predict([[price_A, enc_A]])[0]
+
+    with col2:
+        st.markdown("### Scenario B")
+        price_B = st.slider("Price B", 50, 150, 120)
+        season_B = st.selectbox("Season B", ["Winter", "Summer", "Monsoon"])
+
+        enc_B = le.transform([season_B])[0]
+        demand_B = model.predict([[price_B, enc_B]])[0]
+
+    revenue_A = demand_A * price_A
+    revenue_B = demand_B * price_B
+
+    # -----------------------------
+    # RESULTS
+    # -----------------------------
+    st.subheader("📊 Results")
+
+    st.write("### Per Product Comparison")
+
+    for product in product_list:
+        st.markdown(f"#### {product}")
+
+        col3, col4 = st.columns(2)
+
+        with col3:
+            st.metric("Demand A", f"{demand_A:.2f}")
+            st.metric("Revenue A", f"{revenue_A:.2f}")
+
+        with col4:
+            st.metric("Demand B", f"{demand_B:.2f}")
+            st.metric("Revenue B", f"{revenue_B:.2f}")
+
+    # -----------------------------
+    # AI RECOMMENDATION ENGINE
+    # -----------------------------
+    st.subheader("🤖 AI Recommendations")
+
+    if revenue_A > revenue_B:
+        st.success("👉 Scenario A is better for higher revenue")
     else:
-        st.success("✅ System Normal")
+        st.success("👉 Scenario B is better for higher revenue")
+
+    if demand_A > demand_B:
+        st.info("👉 Scenario A gives higher demand")
+    else:
+        st.info("👉 Scenario B gives higher demand")
+
+    if price_A < price_B:
+        st.warning("👉 Lower price tends to increase demand")
+    else:
+        st.warning("👉 Higher price may reduce demand")
 
     # -----------------------------
-    # DATA TABLE (NEW)
+    # EXPLAINABLE AI
     # -----------------------------
-    df = pd.DataFrame(data, columns=["Temp", "Pressure", "Vibration"])
-    st.subheader("📋 Data History")
-    st.dataframe(df)
+    st.subheader("🧠 Model Explanation")
+
+    importance = model.feature_importances_
+
+    st.write("Feature Importance:")
+    st.write(f"Price Impact: {importance[0]:.2f}")
+    st.write(f"Season Impact: {importance[1]:.2f}")
+
+    if importance[0] > importance[1]:
+        st.info("👉 Price has more influence on demand")
+    else:
+        st.info("👉 Season has more influence on demand")
 
     # -----------------------------
-    # CSV DOWNLOAD (NEW)
+    # FINAL INSIGHT
     # -----------------------------
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("⬇️ Download Data", csv, "data.csv", "text/csv")
+    st.subheader("📌 Final Insight")
+
+    if revenue_B > revenue_A:
+        st.success("Overall: Scenario B is more profitable")
+    else:
+        st.success("Overall: Scenario A is more profitable")
 
 else:
-    st.info("👉 Add at least 8 data points to activate AI")
-
-# -----------------------------
-# FOOTER
-# -----------------------------
-st.markdown("---")
-st.markdown(
-    "🚀 Advanced Digital Twin System with AI Prediction, Monitoring & Simulation")
+    st.info("Enter at least one product")
