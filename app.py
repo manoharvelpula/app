@@ -8,14 +8,14 @@ from sklearn.preprocessing import LabelEncoder
 # CONFIG
 # -----------------------------
 st.set_page_config(page_title="Demand Intelligence Engine", layout="wide")
-st.title("🚀 Demand Forecasting System (Improved)")
+st.title("🚀 AI Demand & Pricing Optimization System")
 
 # -----------------------------
-# SINGLE PRODUCT INPUT
+# PRODUCT INPUT
 # -----------------------------
 st.subheader("🛍️ Product Setup")
 
-product = st.text_input("Enter Product Name", placeholder="e.g., Jacket, Ice Cream")
+product = st.text_input("Enter Product Name", "", placeholder="e.g., Jacket, Ice Cream")
 
 product_type = st.selectbox(
     "Select Product Seasonality",
@@ -23,7 +23,7 @@ product_type = st.selectbox(
 )
 
 # -----------------------------
-# PRODUCT EFFECT (REALISTIC LOGIC)
+# REALISTIC DATA GENERATION
 # -----------------------------
 product_effect_map = {
     "Winter Product": 1,
@@ -31,24 +31,22 @@ product_effect_map = {
     "All-Season Product": 1
 }
 
-# -----------------------------
-# DATA GENERATION (FIXED - NO RANDOM NOISE MODEL)
-# -----------------------------
 @st.cache_data
 def generate_data(product_type):
     np.random.seed(42)
     days = 300
 
     date = pd.date_range(start="2023-01-01", periods=days)
-
     price = np.random.uniform(50, 150, days)
     season = np.random.choice(["Winter", "Summer", "Monsoon"], days)
 
-    # REALISTIC BASE DEMAND MODEL
+    # REALISTIC DEMAND MODEL
     base = 300 - (1.8 * price)
 
-    season_effect = np.where(season == "Winter", 50,
-                     np.where(season == "Summer", 30, 10))
+    season_effect = np.where(
+        season == "Winter", 50,
+        np.where(season == "Summer", 30, 10)
+    )
 
     product_effect = product_effect_map[product_type] * 20
 
@@ -62,39 +60,75 @@ def generate_data(product_type):
     })
 
 # -----------------------------
+# CONFIDENCE SCORE FUNCTION
+# -----------------------------
+def confidence_score(model, X_input):
+    preds = np.array([
+        tree.predict(X_input)[0]
+        for tree in model.estimators_
+    ])
+    confidence = 100 - (np.std(preds) / np.mean(preds) * 100)
+    return max(50, min(confidence, 99))
+
+# -----------------------------
+# PRICE OPTIMIZATION (PROFIT)
+# -----------------------------
+def find_best_profit_price(season):
+    prices = np.arange(50, 151, 5)
+    best_profit = -1
+    best_price = 0
+
+    for p in prices:
+        demand = predict_demand(p, season)
+        profit = (p - 30) * demand  # cost assumed = 30
+
+        if profit > best_profit:
+            best_profit = profit
+            best_price = p
+
+    return best_price, best_profit
+
+# -----------------------------
+# PRICING STRATEGY
+# -----------------------------
+def pricing_strategy(demand, price):
+    elasticity = demand / price
+
+    if elasticity > 2:
+        return "📈 Penetration Pricing (Low price, high demand)"
+    elif elasticity > 1:
+        return "⚖️ Balanced Pricing Strategy"
+    else:
+        return "💎 Premium Pricing Strategy"
+
+# -----------------------------
 # RUN ONLY IF PRODUCT EXISTS
 # -----------------------------
 if product:
 
     df = generate_data(product_type)
 
-    # -----------------------------
-    # ENCODING
-    # -----------------------------
+    # Encoding
     le = LabelEncoder()
     df["season_enc"] = le.fit_transform(df["season"])
 
     X = df[["price", "season_enc"]]
     y = df["demand"]
 
-    # -----------------------------
-    # MODEL
-    # -----------------------------
+    # Model
     model = RandomForestRegressor(
         n_estimators=300,
         random_state=42
     )
     model.fit(X, y)
 
-    # -----------------------------
-    # PREDICTION FUNCTION
-    # -----------------------------
+    # Prediction function
     def predict_demand(price, season):
         enc = le.transform([season])[0]
         return model.predict([[price, enc]])[0]
 
     # -----------------------------
-    # SCENARIO COMPARISON
+    # SCENARIOS
     # -----------------------------
     st.subheader("⚔️ Scenario Comparison")
 
@@ -124,27 +158,61 @@ if product:
     col3, col4 = st.columns(2)
 
     with col3:
-        st.metric("Scenario A Demand", f"{demand_A:.2f}")
-        st.metric("Scenario A Revenue", f"{revenue_A:.2f}")
+        st.metric("Demand A", f"{demand_A:.2f}")
+        st.metric("Revenue A", f"{revenue_A:.2f}")
 
     with col4:
-        st.metric("Scenario B Demand", f"{demand_B:.2f}")
-        st.metric("Scenario B Revenue", f"{revenue_B:.2f}")
+        st.metric("Demand B", f"{demand_B:.2f}")
+        st.metric("Revenue B", f"{revenue_B:.2f}")
 
     # -----------------------------
     # AI RECOMMENDATION
     # -----------------------------
     st.subheader("🤖 AI Recommendation")
 
-    if revenue_A > revenue_B:
-        st.success("👉 Scenario A is more profitable")
-    else:
-        st.success("👉 Scenario B is more profitable")
+    best = "A" if revenue_A > revenue_B else "B"
+    st.success(f"👉 Scenario {best} is better for revenue")
 
-    if demand_A > demand_B:
-        st.info("👉 Scenario A has higher demand")
-    else:
-        st.info("👉 Scenario B has higher demand")
+    # -----------------------------
+    # PRICING STRATEGY
+    # -----------------------------
+    st.subheader("🎯 Pricing Strategy")
+
+    strategy = pricing_strategy(demand_A, price_A)
+    st.info(strategy)
+
+    # -----------------------------
+    # WHAT-IF ANALYSIS
+    # -----------------------------
+    st.subheader("🔮 What-If Analysis (Live Simulation)")
+
+    what_if_price = st.slider("Adjust Price (Live)", 50, 150, 100)
+
+    what_if_demand = predict_demand(what_if_price, season_A)
+    what_if_revenue = what_if_price * what_if_demand
+
+    st.metric("Predicted Demand", f"{what_if_demand:.2f}")
+    st.metric("Predicted Revenue", f"{what_if_revenue:.2f}")
+
+    # -----------------------------
+    # PROFIT OPTIMIZATION
+    # -----------------------------
+    st.subheader("💰 Profit Optimization Mode")
+
+    best_price, best_profit = find_best_profit_price(season_A)
+
+    st.success(f"Best Price: ₹{best_price}")
+    st.success(f"Max Profit: ₹{best_profit:.2f}")
+
+    # -----------------------------
+    # CONFIDENCE SCORE
+    # -----------------------------
+    st.subheader("📊 Confidence Score")
+
+    X_A = [[price_A, le.transform([season_A])[0]]]
+    conf_A = confidence_score(model, X_A)
+
+    st.metric("Model Confidence", f"{conf_A:.2f}%")
 
     # -----------------------------
     # FEATURE IMPORTANCE
@@ -156,20 +224,5 @@ if product:
     st.write(f"Price Impact: {importance[0]:.2f}")
     st.write(f"Season Impact: {importance[1]:.2f}")
 
-    if importance[0] > importance[1]:
-        st.info("👉 Price is the dominant factor")
-    else:
-        st.info("👉 Season is the dominant factor")
-
-    # -----------------------------
-    # FINAL INSIGHT
-    # -----------------------------
-    st.subheader("📌 Final Insight")
-
-    if revenue_A > revenue_B:
-        st.success(f"For {product}: Scenario A is optimal")
-    else:
-        st.success(f"For {product}: Scenario B is optimal")
-
 else:
-    st.info("Enter a product to start analysis")
+    st.info("Enter a product to start analysis 🚀")
