@@ -15,7 +15,7 @@ st.title("🚀 AI Demand & Pricing Optimization System (Fixed)")
 # -----------------------------
 # INPUT
 # -----------------------------
-product = st.text_input("Enter Product Name", "", placeholder="e.g., Jacket, Ice Cream")
+product = st.text_input("Enter Product Name", "", placeholder="e.g., Jacket, Ice Cream, Apple")
 
 product_type = st.selectbox(
     "Select Product Type",
