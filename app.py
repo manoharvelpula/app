@@ -8,19 +8,14 @@ from sklearn.preprocessing import LabelEncoder
 # CONFIG
 # -----------------------------
 st.set_page_config(page_title="Demand Intelligence Engine", layout="wide")
-st.title("🚀 Demand Forecasting System")
+st.title("🚀 Demand Forecasting System (Improved)")
 
 # -----------------------------
-# MULTI-PRODUCT SUPPORT
+# SINGLE PRODUCT INPUT
 # -----------------------------
 st.subheader("🛍️ Product Setup")
 
-products = st.text_area(
-    "Enter Product Names (comma separated)",
-    " "
-)
-
-product_list = [p.strip() for p in products.split(",") if p.strip()]
+product = st.text_input("Enter Product Name", "Jacket")
 
 product_type = st.selectbox(
     "Select Product Seasonality",
@@ -28,34 +23,36 @@ product_type = st.selectbox(
 )
 
 # -----------------------------
-# DATA GENERATION
+# PRODUCT EFFECT (REALISTIC LOGIC)
 # -----------------------------
+product_effect_map = {
+    "Winter Product": 1,
+    "Summer Product": 1,
+    "All-Season Product": 1
+}
 
-
+# -----------------------------
+# DATA GENERATION (FIXED - NO RANDOM NOISE MODEL)
+# -----------------------------
 @st.cache_data
 def generate_data(product_type):
     np.random.seed(42)
-    days = 200
+    days = 300
+
     date = pd.date_range(start="2023-01-01", periods=days)
 
     price = np.random.uniform(50, 150, days)
     season = np.random.choice(["Winter", "Summer", "Monsoon"], days)
 
-    base = 200 - price + np.random.normal(0, 10, days)
+    # REALISTIC BASE DEMAND MODEL
+    base = 300 - (1.8 * price)
 
-    season_effect = []
+    season_effect = np.where(season == "Winter", 50,
+                     np.where(season == "Summer", 30, 10))
 
-    for s in season:
-        if product_type == "Winter Product":
-            effect = 30 if s == "Winter" else -10
-        elif product_type == "Summer Product":
-            effect = 30 if s == "Summer" else -10
-        else:
-            effect = 10
+    product_effect = product_effect_map[product_type] * 20
 
-        season_effect.append(effect)
-
-    demand = base + np.array(season_effect)
+    demand = base + season_effect + product_effect
 
     return pd.DataFrame({
         "date": date,
@@ -64,13 +61,15 @@ def generate_data(product_type):
         "demand": demand
     })
 
-
-if product_list:
+# -----------------------------
+# RUN ONLY IF PRODUCT EXISTS
+# -----------------------------
+if product:
 
     df = generate_data(product_type)
 
     # -----------------------------
-    # MODEL
+    # ENCODING
     # -----------------------------
     le = LabelEncoder()
     df["season_enc"] = le.fit_transform(df["season"])
@@ -78,8 +77,21 @@ if product_list:
     X = df[["price", "season_enc"]]
     y = df["demand"]
 
-    model = RandomForestRegressor(n_estimators=200)
+    # -----------------------------
+    # MODEL
+    # -----------------------------
+    model = RandomForestRegressor(
+        n_estimators=300,
+        random_state=42
+    )
     model.fit(X, y)
+
+    # -----------------------------
+    # PREDICTION FUNCTION
+    # -----------------------------
+    def predict_demand(price, season):
+        enc = le.transform([season])[0]
+        return model.predict([[price, enc]])[0]
 
     # -----------------------------
     # SCENARIO COMPARISON
@@ -91,87 +103,73 @@ if product_list:
     with col1:
         st.markdown("### Scenario A")
         price_A = st.slider("Price A", 50, 150, 90)
-        season_A = st.selectbox("Season A", ["Winter", "Summer", "Monsoon"])
+        season_A = st.selectbox("Season A", ["Winter", "Summer", "Monsoon"], key="A")
 
-        enc_A = le.transform([season_A])[0]
-        demand_A = model.predict([[price_A, enc_A]])[0]
+        demand_A = predict_demand(price_A, season_A)
+        revenue_A = demand_A * price_A
 
     with col2:
         st.markdown("### Scenario B")
         price_B = st.slider("Price B", 50, 150, 120)
-        season_B = st.selectbox("Season B", ["Winter", "Summer", "Monsoon"])
+        season_B = st.selectbox("Season B", ["Winter", "Summer", "Monsoon"], key="B")
 
-        enc_B = le.transform([season_B])[0]
-        demand_B = model.predict([[price_B, enc_B]])[0]
-
-    revenue_A = demand_A * price_A
-    revenue_B = demand_B * price_B
+        demand_B = predict_demand(price_B, season_B)
+        revenue_B = demand_B * price_B
 
     # -----------------------------
     # RESULTS
     # -----------------------------
     st.subheader("📊 Results")
 
-    st.write("### Per Product Comparison")
+    col3, col4 = st.columns(2)
 
-    for product in product_list:
-        st.markdown(f"#### {product}")
+    with col3:
+        st.metric("Scenario A Demand", f"{demand_A:.2f}")
+        st.metric("Scenario A Revenue", f"{revenue_A:.2f}")
 
-        col3, col4 = st.columns(2)
-
-        with col3:
-            st.metric("Demand A", f"{demand_A:.2f}")
-            st.metric("Revenue A", f"{revenue_A:.2f}")
-
-        with col4:
-            st.metric("Demand B", f"{demand_B:.2f}")
-            st.metric("Revenue B", f"{revenue_B:.2f}")
+    with col4:
+        st.metric("Scenario B Demand", f"{demand_B:.2f}")
+        st.metric("Scenario B Revenue", f"{revenue_B:.2f}")
 
     # -----------------------------
-    # AI RECOMMENDATION ENGINE
+    # AI RECOMMENDATION
     # -----------------------------
-    st.subheader("🤖 AI Recommendations")
+    st.subheader("🤖 AI Recommendation")
 
     if revenue_A > revenue_B:
-        st.success("👉 Scenario A is better for higher revenue")
+        st.success("👉 Scenario A is more profitable")
     else:
-        st.success("👉 Scenario B is better for higher revenue")
+        st.success("👉 Scenario B is more profitable")
 
     if demand_A > demand_B:
-        st.info("👉 Scenario A gives higher demand")
+        st.info("👉 Scenario A has higher demand")
     else:
-        st.info("👉 Scenario B gives higher demand")
-
-    if price_A < price_B:
-        st.warning("👉 Lower price tends to increase demand")
-    else:
-        st.warning("👉 Higher price may reduce demand")
+        st.info("👉 Scenario B has higher demand")
 
     # -----------------------------
-    # EXPLAINABLE AI
+    # FEATURE IMPORTANCE
     # -----------------------------
     st.subheader("🧠 Model Explanation")
 
     importance = model.feature_importances_
 
-    st.write("Feature Importance:")
     st.write(f"Price Impact: {importance[0]:.2f}")
     st.write(f"Season Impact: {importance[1]:.2f}")
 
     if importance[0] > importance[1]:
-        st.info("👉 Price has more influence on demand")
+        st.info("👉 Price is the dominant factor")
     else:
-        st.info("👉 Season has more influence on demand")
+        st.info("👉 Season is the dominant factor")
 
     # -----------------------------
     # FINAL INSIGHT
     # -----------------------------
     st.subheader("📌 Final Insight")
 
-    if revenue_B > revenue_A:
-        st.success("Overall: Scenario B is more profitable")
+    if revenue_A > revenue_B:
+        st.success(f"For {product}: Scenario A is optimal")
     else:
-        st.success("Overall: Scenario A is more profitable")
+        st.success(f"For {product}: Scenario B is optimal")
 
 else:
-    st.info("Enter at least one product")
+    st.info("Enter a product to start analysis")
