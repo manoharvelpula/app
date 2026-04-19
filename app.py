@@ -15,7 +15,7 @@ st.title("🚀 Demand Forecasting System (Improved)")
 # -----------------------------
 st.subheader("🛍️ Product Setup")
 
-product = st.text_input("Enter Product Name", "Jacket")
+product = st.text_input("Enter Product Name", placeholder="e.g., Jacket, Ice Cream")
 
 product_type = st.selectbox(
     "Select Product Seasonality",
