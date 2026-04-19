@@ -17,7 +17,7 @@ st.subheader("🛍️ Product Setup")
 
 products = st.text_area(
     "Enter Product Names (comma separated)",
-    " apple "
+    " "
 )
 
 product_list = [p.strip() for p in products.split(",") if p.strip()]
